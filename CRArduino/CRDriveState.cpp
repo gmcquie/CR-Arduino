@@ -11,7 +11,7 @@ CRDriveState::CRDriveState()
 	_prevFrontRightDistance = 0;
 	_prevBackLeftDistance = 0;
 	_prevBackRightDistance = 0;
-	_time = micros();
+	_time = millis();
 }
 
 int CRDriveState::getCRDriveState(int frontLeftDistance, int frontRightDistance, int backLeftDistance, int backRightDistance){
@@ -40,11 +40,11 @@ int CRDriveState::getPrevFREncoderDistance(){
 }
 
 void CRDriveState::setPrevBLEncoderDistance(int distance){
-	_prevBackLeftDistance = distance;;
+	_prevBackLeftDistance = distance;
 }
 
 void CRDriveState::setPrevFLEncoderDistance(int distance){
-	_prevFrontLeftDistance = distance;;
+	_prevFrontLeftDistance = distance;
 }
 
 void CRDriveState::setPrevBREncoderDistance(int distance){

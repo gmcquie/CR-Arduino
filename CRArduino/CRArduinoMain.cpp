@@ -11,6 +11,7 @@
 #include "crconstants.h"
 
 
+
 void CRArduinoMain::setup()
 {
 	
@@ -28,8 +29,8 @@ void CRArduinoMain::setup()
 	//Encoders
 	backLeftEncoder.initEncoder(BACK_LEFT_ENCODER_INT,ENCODER_RESOLUTION_REAR,BACK,LEFT,24,BACK_LEFT_ENCODER_PIN);
 	backRightEncoder.initEncoder(BACK_RIGHT_ENCODER_INT,ENCODER_RESOLUTION_REAR,BACK,RIGHT,25,BACK_RIGHT_ENCODER_PIN);
-	frontLeftEncoder.initEncoder(FRONT_LEFT_ENCODER_INT,ENCODER_RESOLUTION_FRONT,FRONT,LEFT,26,FRONT_LEFT_ENCODER_PIN);
-	frontRightEncoder.initEncoder(FRONT_RIGHT_ENCODER_INT,ENCODER_RESOLUTION_FRONT,FRONT,RIGHT,27,FRONT_RIGHT_ENCODER_PIN);
+	frontLeftEncoder.initEncoder(FRONT_LEFT_ENCODER_INT,ENCODER_RESOLUTION_FRONT,FRONT,LEFT,27,FRONT_LEFT_ENCODER_PIN);
+	frontRightEncoder.initEncoder(FRONT_RIGHT_ENCODER_INT,ENCODER_RESOLUTION_FRONT,FRONT,RIGHT,26,FRONT_RIGHT_ENCODER_PIN);
 	
 	  //DC motors
 		leftMotor.initDCMotor(LEFT_MOTOR_PWM_PIN,LEFT_MOTOR_DIR_PIN,LEFT_MOTOR_EN_PIN,MOTOR_CCW);
@@ -109,8 +110,8 @@ void CRArduinoMain::processDriveCommand(){
 	
 	String targetString = "";
 	int driveDistance = 0;
-	int driveAngle = 0;
-	int targetAngle = 0;
+	double driveAngle = 0;
+	double targetAngle = 0;
 	long int startCount = 0L;
 	long int targetCount = 0L;
 	char fromCR = NULL;
@@ -126,6 +127,17 @@ void CRArduinoMain::processDriveCommand(){
 	long currPulseCount = 0L;
 	int startDistance = 0;
 	int turnDistance = 0;
+	int deltaFrontLeftDistance = 0;
+	int deltaFrontRightDistance = 0;
+	double turnDistAvg = 0;
+	double speedFL = 0;
+	double speedFR = 0;
+	double pwmFL = 0;
+	double pwmFR = 0;
+	unsigned long currTime = 0;
+	unsigned long deltaTime = 0;
+	double desiredSpeed = DRIVE_SPEED;
+	int driveCounter = 0;
 	
 	/*Determine whether turning or driving*/
 	char driveType;
@@ -134,55 +146,99 @@ void CRArduinoMain::processDriveCommand(){
 	switch (driveType)
 	{
 		case 'L': //turn left
-		    rightMotor.setDirection(MOTOR_CCW);
+			//turn off back encoders
+			backLeftEncoder.disableEncoder();
+			backRightEncoder.disableEncoder();
+		    rightMotor.setDirection(MOTOR_CW);
 		    leftMotor.setDirection(MOTOR_CW);
 			
 			//Extract command
-			targetString = piInputString.substring(3,5);
+			targetString = piInputString.substring(3,6);
 			driveAngle = targetString.toInt();
-			motorSpeed = 100;
+			motorSpeed = 255;
 			//Set Drive target
-			targetAngle = orientation - int(driveAngle*1000*(PI/180)); //Both need to be in mm.
+			targetAngle = orientation - ((double)driveAngle*1000.0*(PI/180.0)); //Both need to be in mm.
+			Serial.println("DO: " + (String)driveAngle);
+			Serial.println("TO: " + (String)targetAngle);
 			
 			//loop
 			while(orientation > targetAngle){ 
 				
-				delay(100);
-				frontDistanceAvg = (frontLeftEncoder.getDistanceTraveled() + frontRightEncoder.getDistanceTraveled())/2;
+				delay(25);
+				frontLeftDistance = frontLeftEncoder.getDistanceTraveled();
+				frontRightDistance = frontRightEncoder.getDistanceTraveled();
+				Serial.println("FL: " + (String)frontLeftDistance);
+				Serial.println("FR: " + (String)frontRightDistance);
+				
+				turnDistAvg = (frontLeftEncoder.getDistanceTraveled() - frontRightEncoder.getDistanceTraveled())/2.0;
 				//convert distance (arc length) to angle using the radius to the wheels S = r*theta, solve for theta (rad)
-				orientation = (frontDistanceAvg*1000/DRIVE_SHAFT_RADIUS);
+				orientation = ((turnDistAvg*1000.0)/DRIVE_SHAFT_RADIUS/TURN_SCALE);
+				
+				Serial.println("O: " + (String)orientation);
 				
 				rightMotor.setSpeed(motorSpeed);
 				leftMotor.setSpeed(motorSpeed);
 			}
 			rightMotor.setSpeed(0);
 			leftMotor.setSpeed(0);
+			delay(200);
+			frontLeftDistance = frontLeftEncoder.getDistanceTraveled();
+			frontRightDistance = frontRightEncoder.getDistanceTraveled();
+			Serial.println("FL: " + (String)frontLeftDistance);
+			Serial.println("FR: " + (String)frontRightDistance);
+			turnDistAvg = (frontLeftEncoder.getDistanceTraveled() - frontRightEncoder.getDistanceTraveled())/2.0;
+			orientation = ((turnDistAvg*1000.0)/DRIVE_SHAFT_RADIUS/TURN_SCALE);
+			Serial.println("O: " + (String)orientation);
+			//Turn on back encoders
+			backLeftEncoder.enableEncoder();
+			backRightEncoder.enableEncoder();
 			break;
 			
 		case 'R': //turn right
+			//turn off back encoders
+			backLeftEncoder.disableEncoder();
+			backRightEncoder.disableEncoder();
 			rightMotor.setDirection(MOTOR_CCW);
 			leftMotor.setDirection(MOTOR_CCW);
 			
 				//Extract command
-				targetString = piInputString.substring(3,5);
+				targetString = piInputString.substring(3,6);
 				driveAngle = targetString.toInt();
-				motorSpeed = 100;
+				
+				motorSpeed = 255;
 				//Set Drive target
-				targetAngle = orientation + int(driveAngle*1000*(PI/180)); //watch for overflow
-	
+				targetAngle = orientation + ((double)driveAngle*1000.0*(PI/180.0)); //watch for overflow
+				Serial.println("DO: " + (String)driveAngle);
+				Serial.println("TO: " + (String)targetAngle);
 				//loop
 				while(orientation < targetAngle){
 					
-					delay(100);
-					frontDistanceAvg = (frontLeftEncoder.getDistanceTraveled() + frontRightEncoder.getDistanceTraveled())/2;
-					//convert distance (arc length) to angle using the radius to the wheels S = r*theta, solve for theta (rad)
-					orientation = ((frontDistanceAvg*1000)/DRIVE_SHAFT_RADIUS);
+					delay(25);
+						frontLeftDistance = frontLeftEncoder.getDistanceTraveled();
+						frontRightDistance = frontRightEncoder.getDistanceTraveled();
+						Serial.println("FL: " + (String)frontLeftDistance);
+						Serial.println("FR: " + (String)frontRightDistance);
 					
+					turnDistAvg = (frontLeftEncoder.getDistanceTraveled() - frontRightEncoder.getDistanceTraveled())/2.0;
+					//convert distance (arc length) to angle using the radius to the wheels S = r*theta, solve for theta (rad)
+					orientation = ((turnDistAvg*1000.0)/DRIVE_SHAFT_RADIUS/TURN_SCALE);
+					Serial.println("O: " + (String)orientation);
 					rightMotor.setSpeed(motorSpeed);
 					leftMotor.setSpeed(motorSpeed);
 				}
 				rightMotor.setSpeed(0);
 				leftMotor.setSpeed(0);
+				delay(200);
+				frontLeftDistance = frontLeftEncoder.getDistanceTraveled();
+				frontRightDistance = frontRightEncoder.getDistanceTraveled();
+				Serial.println("FL: " + (String)frontLeftDistance);
+				Serial.println("FR: " + (String)frontRightDistance);
+				turnDistAvg = (frontLeftEncoder.getDistanceTraveled() - frontRightEncoder.getDistanceTraveled())/2.0;
+				orientation = ((turnDistAvg*1000.0)/DRIVE_SHAFT_RADIUS/TURN_SCALE);
+				Serial.println("O: " + (String)orientation);
+				//Turn on back encoders
+				backLeftEncoder.enableEncoder();
+				backRightEncoder.enableEncoder();
 				break;
 			
 		case 'B':
@@ -190,11 +246,16 @@ void CRArduinoMain::processDriveCommand(){
 			
 		default:
 			
-			rightMotor.setDirection(MOTOR_CCW);
-			leftMotor.setDirection(MOTOR_CW);
+			//Declare
+			PID pidFL(&speedFL,&pwmFL,&desiredSpeed,0.25,0.5,0.01,DIRECT);
+			PID pidFR(&speedFR,&pwmFR,&desiredSpeed,0.25,0.5,0.01,DIRECT);
+			pidFL.SetMode(AUTOMATIC);
+			pidFR.SetMode(AUTOMATIC);
+			rightMotor.setDirection(MOTOR_CW);
+			leftMotor.setDirection(MOTOR_CCW);
 			rightMotor.setSpeed(0);
 			leftMotor.setSpeed(0);
-			//Extract Command
+			
 			targetString = piInputString.substring(3,6);
 		
 			driveDistance = targetString.toInt();
@@ -204,7 +265,7 @@ void CRArduinoMain::processDriveCommand(){
 			startDistance = distanceTraveled;
 			
 			while(distanceTraveled < targetDistance){
-				delay(200);
+				delay(50);
 				//Serial.println(distanceTraveled);
 				//currPulseCount = frontLeftEncoder.getPulseCount();
 				//Serial.println(currPulseCount);
@@ -221,10 +282,12 @@ void CRArduinoMain::processDriveCommand(){
 				//Serial.println("PL:" +  String(currPulseCount));
 				currPulseCount = frontRightEncoder.getPulseCount();
 				//Serial.println("PBL:" +  String(currPulseCount));
-				Serial.println("FLD:" +  String(frontLeftDistance));
-				Serial.println("FRD:" +  String(frontRightDistance));
-				Serial.println("BLD:" +  String(backLeftDistance));
-				Serial.println("BRD:" +  String(backRightDistance));
+				if(driveCounter == 3){
+				Serial.println("$DFLD:" +  String(frontLeftDistance));
+				Serial.println("$DFRD:" +  String(frontRightDistance));
+				Serial.println("$DBLD:" +  String(backLeftDistance));
+				Serial.println("$DBRD:" +  String(backRightDistance));
+				}
 				//Serial.println("FR:" + String(frontRightDistance));
 				//Serial.println(relativeDistance);
 				
@@ -242,23 +305,80 @@ void CRArduinoMain::processDriveCommand(){
 					motorSpeed = 85;
 				}
 				*/
-				motorSpeed = 50;
+				//motorSpeed = 50;
 				//Serial.println("Speed Set: " + String(motorSpeed));
 				
+				
 				//Speed correction algorithm here:
+				deltaFrontLeftDistance = frontLeftDistance - crDriveState.getPrevFLEncoderDistance();
+				deltaFrontRightDistance = frontRightDistance - crDriveState.getPrevFREncoderDistance();
+				crDriveState.setPrevFREncoderDistance(frontRightDistance);
+				crDriveState.setPrevFLEncoderDistance(frontLeftDistance);
 				
+				currTime = millis();
+				deltaTime = currTime - crDriveState.getLastTime();
+				crDriveState.setNewTime(currTime);
 				
+				//Serial.println("DT: " + (String)deltaTime);
+				
+				speedFL = ((deltaFrontLeftDistance*1000)/deltaTime);
+				speedFR = ((deltaFrontRightDistance*1000)/deltaTime);
+				
+				if(driveCounter == 3){
+					Serial.println("$DFLS: " + (String)(speedFL));
+					Serial.println("$DFRS: " + (String)(speedFR));
+					Serial.println("$DpwmL: " + (String)(pwmFL));
+					Serial.println("$DpwmR: " + (String)(pwmFR));
+				//	Serial.println("FLDD: " + (String)(deltaFrontLeftDistance));
+				//	Serial.println("FRDD: " + (String)(deltaFrontRightDistance));
+				//	Serial.println("DT: " +  (String)(deltaTime));
+				
+					driveCounter = 0;
+					
+				}
+				
+				/*
+				if(speedFL < desiredSpeed){
+					pwmFL = pwmFL + 5;
+				}else if(speedFL > desiredSpeed){
+					pwmFL = pwmFL - 5;
+				}
+				if(speedFR < desiredSpeed){
+					pwmFR = pwmFR + 5;
+				}else if(speedFR > desiredSpeed){
+					pwmFR = pwmFR - 5;
+				}*/
+				
+				pidFL.Compute();
+				pidFR.Compute();
+				
+				//Don't let the CR attack Thomas.
+				if(pwmFL > 250){
+					pwmFL = 250;
+				}
+				if(pwmFR > 250){
+					pwmFR = 250;
+				}
+				if(pwmFL < 0){
+					pwmFL = 0;
+				}
+				if(pwmFR < 0){
+					pwmFR = 0;
+				}
 			
-				leftMotor.setSpeed(motorSpeed);
-				rightMotor.setSpeed(motorSpeed);
+			
+				leftMotor.setSpeed(pwmFL);
+				rightMotor.setSpeed(pwmFR);
+				
+				driveCounter++;
 			}
 			
 			rightMotor.setSpeed(0);
 			leftMotor.setSpeed(0);
 		    break;
 	}
-	Serial.println("FL:" +  String(frontLeftDistance));
-	Serial.println("FR:" + String(frontRightDistance));
+	delay(200);
+
 	Serial.print("$DP\n"); 
 	Serial.flush();
 }
