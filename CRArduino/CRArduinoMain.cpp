@@ -95,7 +95,17 @@ void CRArduinoMain::parseCommand(){
 		processRappelCommand();
 		break;
 		case 'D':
-		processDriveCommand();
+		if(piInputString[2] == 'T'){
+			if(piInputString[3] == 'G'){
+				manualDriveOn();
+			}else if(piInputString[3] == 'S'){
+				manaulDriveOff();
+			}else{
+				processTransitionCommand();
+			}
+		}else{
+			processDriveCommand();
+		}
 		break;
 		case 'I':
 		processImageCommand();
@@ -257,6 +267,11 @@ void CRArduinoMain::processDriveCommand(){
 			leftMotor.setSpeed(0);
 			
 			targetString = piInputString.substring(3,6);
+			if (targetString == "TRA")
+			{
+				processTransitionCommand();
+				return;
+			}
 		
 			driveDistance = targetString.toInt();
 			
@@ -276,7 +291,16 @@ void CRArduinoMain::processDriveCommand(){
 				frontLeftDistance = frontLeftEncoder.getDistanceTraveled();
 				frontRightDistance = frontRightEncoder.getDistanceTraveled();
 				frontDistanceAvg = (frontLeftDistance + frontRightDistance)/2;
-				distanceTraveled = rearDistanceAvg;// + frontDistanceAvg)/2;
+				if(piInputString[6] == 'F') //Front Encoders
+				{
+					digitalWrite(13, HIGH);  //WHY YOU NO WORK?!
+					distanceTraveled = frontDistanceAvg;	
+				}
+				else
+				{
+					digitalWrite(13, LOW);
+					distanceTraveled = rearDistanceAvg;
+				}
 			    //distanceTraveled = frontRightEncoder.getDistanceTraveled();
 				relativeDistance = distanceTraveled - startDistance;
 				//Serial.println("PL:" +  String(currPulseCount));
@@ -457,6 +481,63 @@ void CRArduinoMain::blinkLED(int num){
 		digitalWrite(13,LOW);
 		delay(250);
 	}
+}
+
+void CRArduinoMain::processTransitionCommand(){
+	int deltaBackLeftDistance = 99;
+	int deltaBackRightDistance = 99;
+	int deltaDistAvg = 99;
+	//get initial pulse count
+	int pulseCntR = backRightEncoder.getPulseCount();
+	int pulseCntL = backLeftEncoder.getPulseCount();
+	//make it go backward
+	rightMotor.setDirection(MOTOR_CCW);
+	leftMotor.setDirection(MOTOR_CW);
+	int motorSpeed = 50;
+	rightMotor.setSpeed(motorSpeed);
+	leftMotor.setSpeed(motorSpeed);
+	
+	// declare needed variables
+	int backLeftDistance = backLeftEncoder.getDistanceTraveled();
+	int backRightDistance = backRightEncoder.getDistanceTraveled();
+	
+	//determine speed
+	deltaBackLeftDistance = backLeftDistance - crDriveState.getPrevBLEncoderDistance();
+	deltaBackRightDistance = backRightDistance - crDriveState.getPrevBREncoderDistance();
+	deltaDistAvg = (deltaBackLeftDistance + deltaBackRightDistance)/2;
+	crDriveState.setPrevBREncoderDistance(backRightDistance);
+	crDriveState.setPrevBLEncoderDistance(backLeftDistance);
+	
+	//once the speed is zero, exit command
+	while(deltaDistAvg > 1){ // might change this threshold
+		delay(50);
+		//determine speed
+		deltaBackLeftDistance = backLeftDistance - crDriveState.getPrevBLEncoderDistance();
+		deltaBackRightDistance = backRightDistance - crDriveState.getPrevBREncoderDistance();
+		crDriveState.setPrevBREncoderDistance(backRightDistance);
+		crDriveState.setPrevBLEncoderDistance(backLeftDistance);
+		deltaDistAvg = (deltaBackLeftDistance+deltaBackRightDistance)/2;
+		//once the speed is zero, exit command
+	}
+	
+	// keep pulse count from before
+	frontRightEncoder.setPulseCount(pulseCntR);
+	frontLeftEncoder.setPulseCount(pulseCntL);
+	Serial.println("$DTP"); //it's done it!
+}
+
+void CRArduinoMain::manualDriveOn(){
+	leftMotor.setDirection(MOTOR_CCW);
+	rightMotor.setDirection(MOTOR_CW);
+	leftMotor.setSpeed(50);
+	rightMotor.setSpeed(50);
+	Serial.print("$DTP\n");
+}
+
+void CRArduinoMain::manaulDriveOff(){
+	leftMotor.setSpeed(0);
+	rightMotor.setSpeed(0);
+	Serial.print("$DTP\n");
 }
 
 /**

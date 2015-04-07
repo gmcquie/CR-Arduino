@@ -66,6 +66,9 @@ class CRArduinoMain
 	void processStatusRequest();
 	void blinkLED(int num);
 	void processImageCommand();
+	void processTransitionCommand();
+	void manualDriveOn();
+	void manaulDriveOff();
 };
 
 extern CRArduinoMain crArduinoMain;
